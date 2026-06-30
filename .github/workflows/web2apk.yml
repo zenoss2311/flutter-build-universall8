@@ -1,0 +1,57 @@
+name: Build Web2APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      web_url:
+        description: 'URL website yang dibungkus jadi APK'
+        required: true
+      app_name:
+        description: 'Nama aplikasi'
+        required: true
+      icon_url:
+        description: 'URL icon PNG'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Siapkan project dari template
+        run: |
+          set -e
+          cp -r templates/webview_template project_web
+          cd project_web
+          sed -i "s#__WEB_URL__#${{ inputs.web_url }}#g" lib/main.dart
+          APP_NAME="${{ inputs.app_name }}"
+          sed -i "s/__APP_NAME__/$APP_NAME/g" pubspec.yaml
+          sed -i "s/__APP_NAME__/$APP_NAME/g" android/app/src/main/AndroidManifest.xml
+          curl -sL "${{ inputs.icon_url }}" -o assets/icon/icon.png
+
+      - name: Flutter pub get
+        working-directory: project_web
+        run: flutter pub get
+
+      - name: Generate launcher icon
+        working-directory: project_web
+        run: flutter pub run flutter_launcher_icons
+
+      - name: Build APK release
+        working-directory: project_web
+        run: flutter build apk --release --android-skip-build-dependency-validation
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-build
+          path: project_web/build/app/outputs/flutter-apk/*.apk
+          retention-days: 1
